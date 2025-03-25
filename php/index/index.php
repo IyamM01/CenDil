@@ -2,29 +2,21 @@
 require 'config.php';
 
 $spreadsheetId = '1Ah4kw6mVAENSXvEZzIJR2VL0-Z_-G0EVjBDiY7kl3NU'; // Ganti dengan ID spreadsheet kamu
-$range = 'Sheet1!A:B'; // Menulis di kolom A dan B
+$range = 'Sheet1!A:C'; // Menulis di kolom A, B, dan C
 
 $service = getSpreadsheetService();
 
 // Fungsi untuk membaca total uang yang sudah ada di spreadsheet
 function getTotalUang($service, $spreadsheetId) {
-    try {
-        $range = 'Sheet1!B:B'; // Kolom B menyimpan jumlah uang
-        $response = $service->spreadsheets_values->get($spreadsheetId, $range);
-        $values = $response->getValues();
+    $range = 'Sheet1!C:C'; // Kolom C menyimpan total uang
+    $response = $service->spreadsheets_values->get($spreadsheetId, $range);
+    $values = $response->getValues();
     
-        $total = 0;
-        if (!empty($values)) {
-            foreach ($values as $row) {
-                if (isset($row[0])) {
-                    $total += floatval($row[0]);
-                }
-            }
-        }
-        return $total;
-    } catch (Exception $e) {
-        return 0;
+    if (!empty($values)) {
+        $lastRow = end($values);
+        return isset($lastRow[0]) ? floatval($lastRow[0]) : 0;
     }
+    return 0;
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -40,19 +32,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         [$tanggal, $jumlah, $totalSekarang] // Data yang akan dimasukkan
     ];
     
-    try {
-        $body = new Google\Service\Sheets\ValueRange([
-            'values' => $values
-        ]);
+    $body = new Google\Service\Sheets\ValueRange([
+        'values' => $values
+    ]);
     
-        $params = ['valueInputOption' => 'RAW'];
-        $service->spreadsheets_values->append($spreadsheetId, 'Sheet1!A:C', $body, $params);
+    $params = ['valueInputOption' => 'RAW'];
+    $service->spreadsheets_values->append($spreadsheetId, 'Sheet1!A:C', $body, $params);
     
-        echo json_encode(["status" => "success", "total" => $totalSekarang]);
-    } catch (Exception $e) {
-        echo json_encode(["status" => "error", "message" => $e->getMessage()]);
-    }
-    exit();
+    echo json_encode(["success" => true, "total" => $totalSekarang]);
+    exit;
 }
 
 $totalTerkini = getTotalUang($service, $spreadsheetId);
@@ -63,25 +51,18 @@ $totalTerkini = getTotalUang($service, $spreadsheetId);
 <head>
     <title>Celengan Digital</title>
     <script>
-        function tambahUang() {
-            var jumlahInput = document.getElementById("jumlah");
-            var jumlah = jumlahInput.value;
-            if (jumlah === "") return;
-            
-            var formData = new FormData();
-            formData.append("jumlah", jumlah);
-            
+        function submitForm(event) {
+            event.preventDefault();
+            let formData = new FormData(document.getElementById("celenganForm"));
             fetch("", {
                 method: "POST",
                 body: formData
             })
             .then(response => response.json())
             .then(data => {
-                if (data.status === "success") {
+                if (data.success) {
+                    document.getElementById("jumlah").value = ""; // Kosongkan input
                     document.getElementById("totalUang").innerText = "Rp " + new Intl.NumberFormat("id-ID").format(data.total);
-                    jumlahInput.value = ""; // Kosongkan input setelah submit
-                } else {
-                    alert("Terjadi kesalahan: " + data.message);
                 }
             })
             .catch(error => console.error("Error:", error));
@@ -90,9 +71,9 @@ $totalTerkini = getTotalUang($service, $spreadsheetId);
 </head>
 <body>
     <h2>Masukkan Uang ke Celengan</h2>
-    <form onsubmit="event.preventDefault(); tambahUang();">
+    <form id="celenganForm" onsubmit="submitForm(event)">
         <label>Jumlah (Rp):</label>
-        <input type="number" id="jumlah" required>
+        <input type="number" name="jumlah" id="jumlah" required>
         <button type="submit">Simpan</button>
     </form>
     <h3>Total Uang Saat Ini: <span id="totalUang">Rp <?php echo number_format($totalTerkini, 0, ',', '.'); ?></span></h3>
